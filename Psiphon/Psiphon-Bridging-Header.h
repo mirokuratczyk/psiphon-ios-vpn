@@ -55,3 +55,12 @@
 // Ads
 #import "AdControllerWrapper.h"
 
+// Data stores
+#import "PsiphonConfigReader.h"
+#import "PsiphonDataSharedDB.h"
+#import "PsiphonConfigUserDefaults.h"
+
+// Feedback
+#import "FeedbackUpload.h"
+#import "JetsamTracking.h"
+#import "JetsamMetrics+Feedback.h"
