@@ -29,7 +29,6 @@
 
 // Utilities
 #import "AppInfo.h"
-#import "PsiphonDataSharedDB.h"
 #import "SharedConstants.h"
 #import "Notifier.h"
 #import "AppDelegate.h"

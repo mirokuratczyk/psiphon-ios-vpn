@@ -138,140 +138,11 @@ public func feedbackReducer(
         }
         let feedbackUpload = state.feedbackUpload!
 
-        // Breaking this expression out helps the type checker reason about the type of the
-        // following signal chain.
-        let s =
-            SignalProducer
-            .combineLatest(environment.internetReachabilityStatusSignal,
-                           environment.tunnelStatusSignal,
-                           environment.tunnelConnectionRefSignal,
-                           environment.subscriptionStatusSignal,
-                           environment.getAppStateFeedbackEntry)
-
         if let nextFeedback = state.queuedFeedbacks.first {
             return [
                 environment.feedbackLogger.log(
                     .info, LogMessage(stringLiteral: "uploading feedback")).mapNever(),
-                // Signal which encapsulates the feedback upload operation.
-                //
-                // The upload will be started once there is network connectivity and VPN is
-                // disconnected or connected. If the state changes while an upload is ongoing (e.g.
-                // VPN state changes from connected to disconnecting, or the subscription status
-                // changes), then the ongoing upload is cancelled and automatically retried by
-                // restarting the upload when the required preconditions are met again.
-                //
-                // Warning: if the state keeps changing before the upload completes, then
-                // the upload could be retried indefinitely. In the future it could be desirable to
-                // restrict the number of retries in this signal, or propagate the retry number to
-                // the feedback upload provider and allow the implementer to decide when to stop
-                // retrying.
-                s
-                .skipRepeats({ (lhs, rhs) -> Bool in
-                     return lhs == rhs
-                 })
-                .flatMap(.latest) { (value: (ReachabilityStatus, TunnelProviderVPNStatus,
-                                             TunnelConnection?, AppStoreIAP.SubscriptionStatus,
-                                             DiagnosticEntry))
-                    -> SignalProducer<SignalTermination<FeedbackAction>, Never> in
-
-                    let reachabilityStatus = value.0
-                    if reachabilityStatus == .notReachable {
-                        return SignalProducer(value: .value(._log("waiting for network connectivity")))
-                    }
-
-                    let vpnStatus = value.1
-                    guard vpnStatus == .invalid ||
-                            vpnStatus == .disconnected ||
-                            vpnStatus == .connected else {
-                        return
-                            SignalProducer(value: .value(._log("waiting for VPN to be disconnected or connected")))
-                    }
-
-                    guard let psiphonConfig = environment.getPsiphonConfig() else {
-                        return
-                            SignalProducer(value:.terminate)
-                            .prefix(value: .value(._feedbackUploadProviderCompleted(.some(ErrorRepr(repr: "Psiphon config nil")))))
-                    }
-
-                    // Do not use upstream proxy for upload if the VPN could be connected.
-                    let useUpstreamProxy =
-                        vpnStatus == .invalid ||
-                        vpnStatus == .disconnecting ||
-                        vpnStatus == .disconnected
-
-                    let subscriptionStatus = value.3
-                    switch feedbackUploadPsiphonConfig(basePsiphonConfig: psiphonConfig,
-                                                       useUpstreamProxy: useUpstreamProxy,
-                                                       subscriptionStatus: subscriptionStatus,
-                                                       appInfo: environment.appInfo()) {
-
-                    case .success(let psiphonConfig):
-                        let appStateFeedbackEntry = value.4
-                        let feedback =
-                            feedbackJSON(userFeedback: nextFeedback,
-                                         psiphonConfig: psiphonConfig,
-                                         appStateFeedbackEntry: appStateFeedbackEntry,
-                                         sharedDB: environment.sharedDB,
-                                         getCurrentTime: environment.getCurrentTime,
-                                         reachabilityStatus: reachabilityStatus)
-
-                        switch feedback {
-                        case .success(let feedbackJSON):
-                            // Last moment VPN status check.
-                            if let tunnelConnection = value.2 {
-                                if case .connection(let tunnelConnectionVPNStatus) = tunnelConnection.connectionStatus() {
-                                    guard tunnelConnectionVPNStatus == .invalid ||
-                                            tunnelConnectionVPNStatus == .disconnected ||
-                                            tunnelConnectionVPNStatus == .connected else {
-                                        return
-                                            SignalProducer(value: .value(
-                                                            ._log("waiting for VPN to be disconnected or connected")))
-                                    }
-                                }
-                            }
-
-                            return
-                                sendFeedback(feedbackUpload: feedbackUpload,
-                                             feedbackJson: feedbackJSON,
-                                             feedbackConfigJson: psiphonConfig)
-                                .flatMap(.concat) {
-                                    (value: FeedbackUploadProviderResult)
-                                    -> SignalProducer<SignalTermination<FeedbackAction>, Never> in
-                                    switch value {
-                                    case .notice(let notice):
-                                        return SignalProducer(value:.value(._feedbackUploadProviderNotice(notice)))
-                                    case .completed(let error):
-                                        return
-                                            SignalProducer(value:.terminate)
-                                            .prefix(value: .value(._feedbackUploadProviderCompleted(error)))
-                                    }
-                                }
-                        case .failure(let error):
-                            return
-                                SignalProducer(value:.terminate)
-                                .prefix(value:.value(._feedbackUploadProviderCompleted(.some(error))))
-                        }
-
-                    case .failure(let error):
-                        return
-                            SignalProducer(value:.terminate)
-                            .prefix(value:.value(._feedbackUploadProviderCompleted(.some(error))))
-                    }
-
-                 }
-                .take(while: { (signalTermination: SignalTermination<FeedbackAction>) -> Bool in
-                    // Forwards values while the `.terminate` value has not been emitted.
-                    guard case .value(_) = signalTermination else {
-                        return false
-                    }
-                    return true
-                })
-                .map { (signalTermination: SignalTermination<FeedbackAction>) -> FeedbackAction in
-                    guard case let .value(action) = signalTermination else {
-                        fatalError()
-                    }
-                    return action
-                }
+                sendFeedback(userFeedback: nextFeedback, feedbackUpload: feedbackUpload, environment: environment)
             ]
         }
         return []
@@ -305,4 +176,149 @@ public func feedbackReducer(
         // Kick off uploads.
         return effects + [SignalProducer(value:FeedbackAction._sendNextFeedback)]
     }
+}
+
+
+/// Signal which encapsulates the feedback upload operation.
+///
+/// The upload will be started once there is network connectivity and VPN is
+/// disconnected or connected. If the state changes while an upload is ongoing (e.g.
+/// VPN state changes from connected to disconnecting, or the subscription status
+/// changes), then the ongoing upload is cancelled and automatically retried by
+/// restarting the upload when the required preconditions are met again.
+///
+/// - Warning: If the state keeps changing before the upload completes, then
+/// the upload could be retried indefinitely. In the future it could be desirable to
+/// restrict the number of retries in this signal, or propagate the retry number to
+/// the feedback upload provider and allow the implementer to decide when to stop
+/// retrying.
+///   
+/// - Parameters:
+///   - userFeedback: User feedback to upload.
+///   - feedbackUpload: Instance which will facilitate the feedback upload.
+///   - environment: Reducer environment.
+/// - Returns: Cold signal which will perform the feedback upload operation when observed. The signal emits FeedbackAction items
+/// to signal when the upload has completed and to perform logging.
+fileprivate func sendFeedback(userFeedback: UserFeedback,
+                              feedbackUpload: FeedbackUploadProvider,
+                              environment: FeedbackReducerEnvironment) -> Effect<FeedbackAction> {
+
+    // Breaking this expression out helps the type checker reason about the type of the
+    // following signal chain.
+    let triggers =
+        SignalProducer
+        .combineLatest(environment.internetReachabilityStatusSignal,
+                       environment.tunnelStatusSignal,
+                       environment.tunnelConnectionRefSignal,
+                       environment.subscriptionStatusSignal,
+                       environment.getAppStateFeedbackEntry)
+
+    return
+        triggers
+        .skipRepeats({ (lhs, rhs) -> Bool in
+             return lhs == rhs
+         })
+        .flatMap(.latest) { (value: (ReachabilityStatus, TunnelProviderVPNStatus,
+                                     TunnelConnection?, AppStoreIAP.SubscriptionStatus,
+                                     DiagnosticEntry))
+            -> SignalProducer<SignalTermination<FeedbackAction>, Never> in
+
+            let reachabilityStatus = value.0
+            if reachabilityStatus == .notReachable {
+                return SignalProducer(value: .value(._log("waiting for network connectivity")))
+            }
+
+            let vpnStatus = value.1
+            guard vpnStatus == .invalid ||
+                    vpnStatus == .disconnected ||
+                    vpnStatus == .connected else {
+                return
+                    SignalProducer(value: .value(._log("waiting for VPN to be disconnected or connected")))
+            }
+
+            guard let psiphonConfig = environment.getPsiphonConfig() else {
+                return
+                    SignalProducer(value:.terminate)
+                    .prefix(value: .value(._feedbackUploadProviderCompleted(.some(ErrorRepr(repr: "Psiphon config nil")))))
+            }
+
+            // Do not use upstream proxy for upload if the VPN could be connected.
+            let useUpstreamProxy =
+                vpnStatus == .invalid ||
+                vpnStatus == .disconnecting ||
+                vpnStatus == .disconnected
+
+            let subscriptionStatus = value.3
+            switch feedbackUploadPsiphonConfig(basePsiphonConfig: psiphonConfig,
+                                               useUpstreamProxy: useUpstreamProxy,
+                                               subscriptionStatus: subscriptionStatus,
+                                               appInfo: environment.appInfo()) {
+
+            case .success(let psiphonConfig):
+                let appStateFeedbackEntry = value.4
+                let feedback =
+                    feedbackJSON(userFeedback: userFeedback,
+                                 psiphonConfig: psiphonConfig,
+                                 appStateFeedbackEntry: appStateFeedbackEntry,
+                                 sharedDB: environment.sharedDB,
+                                 getCurrentTime: environment.getCurrentTime,
+                                 reachabilityStatus: reachabilityStatus)
+
+                switch feedback {
+                case .success(let feedbackJSON):
+                    // Last moment VPN status check.
+                    if let tunnelConnection = value.2 {
+                        if case .connection(let tunnelConnectionVPNStatus) = tunnelConnection.connectionStatus() {
+                            guard tunnelConnectionVPNStatus == .invalid ||
+                                    tunnelConnectionVPNStatus == .disconnected ||
+                                    tunnelConnectionVPNStatus == .connected else {
+                                return
+                                    SignalProducer(value: .value(
+                                                    ._log("waiting for VPN to be disconnected or connected")))
+                            }
+                        }
+                    }
+
+                    return
+                        sendFeedback(feedbackUpload: feedbackUpload,
+                                     feedbackJson: feedbackJSON,
+                                     feedbackConfigJson: psiphonConfig)
+                        .flatMap(.concat) {
+                            (value: FeedbackUploadProviderResult)
+                            -> SignalProducer<SignalTermination<FeedbackAction>, Never> in
+                            switch value {
+                            case .notice(let notice):
+                                return SignalProducer(value:.value(._feedbackUploadProviderNotice(notice)))
+                            case .completed(let error):
+                                return
+                                    SignalProducer(value:.terminate)
+                                    .prefix(value: .value(._feedbackUploadProviderCompleted(error)))
+                            }
+                        }
+                case .failure(let error):
+                    return
+                        SignalProducer(value:.terminate)
+                        .prefix(value:.value(._feedbackUploadProviderCompleted(.some(error))))
+                }
+
+            case .failure(let error):
+                return
+                    SignalProducer(value:.terminate)
+                    .prefix(value:.value(._feedbackUploadProviderCompleted(.some(error))))
+            }
+
+         }
+        .take(while: { (signalTermination: SignalTermination<FeedbackAction>) -> Bool in
+            // Forwards values while the `.terminate` value has not been emitted.
+            guard case .value(_) = signalTermination else {
+                return false
+            }
+            return true
+        })
+        .map { (signalTermination: SignalTermination<FeedbackAction>) -> FeedbackAction in
+            guard case let .value(action) = signalTermination else {
+                fatalError()
+            }
+            return action
+        }
 }

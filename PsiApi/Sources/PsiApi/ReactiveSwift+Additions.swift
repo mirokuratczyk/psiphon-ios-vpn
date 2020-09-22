@@ -62,10 +62,10 @@ public struct Combined<Value> {
 ///     }
 ///
 /// - Note: can be replaced by an inclusive `take(while:)` operator.
-public enum SignalTermination<T> {
+public enum SignalTermination<Value> {
 
     /// The next value in the stream.
-    case value(T)
+    case value(Value)
 
     /// Value which indicates that the signal should be completed.
     case terminate

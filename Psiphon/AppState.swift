@@ -231,18 +231,11 @@ func makeEnvironment(
         getAppStateFeedbackEntry:
             store.$value.signalProducer
             .take(first: 1)
-            .map({ appState -> DiagnosticEntry in
-                let msg =
-                    """
-                    ContainerInfo: {
-                    \"AppState\":\"\(makeFeedbackEntry(appState))\",
-                    \"UserDefaultsConfig\":\"\(makeFeedbackEntry(UserDefaultsConfig()))\",
-                    \"PsiphonDataSharedDB\": \"\(makeFeedbackEntry(sharedDB))\",
-                    \"OutstandingEffectCount\": \(store.outstandingEffectCount)
-                    }
-                    """
-                return DiagnosticEntry(msg, andTimestamp: .some(Date()))
-            }),
+            .map { appState -> DiagnosticEntry in
+                return appState.feedbackEntry(userDefaultsConfig: UserDefaultsConfig(),
+                                              sharedDB: sharedDB,
+                                              store: store)
+            },
         getFeedbackUpload: {PsiphonTunnelFeedback()}
     )
     

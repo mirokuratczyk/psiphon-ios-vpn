@@ -204,6 +204,7 @@
 		CE4E9BC01BBEECF30060FF8B /* Psiphon.entitlements in Resources */ = {isa = PBXBuildFile; fileRef = CE4E9BBF1BBEECF30060FF8B /* Psiphon.entitlements */; };
 		CE4E9BC21BBEECFC0060FF8B /* PsiphonVPN.entitlements in Resources */ = {isa = PBXBuildFile; fileRef = CE4E9BC11BBEECFC0060FF8B /* PsiphonVPN.entitlements */; };
 		CE551C6A24FBFB8E00011C51 /* PsiphonFeedback+FeedbackUploadProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE551C6924FBFB8E00011C51 /* PsiphonFeedback+FeedbackUploadProvider.swift */; };
+		CE58B642251A31370081C73C /* AppState+Feedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE58B641251A31370081C73C /* AppState+Feedback.swift */; };
 		CE6C3F6A24366AE1007A17F0 /* ClientMetadata.m in Sources */ = {isa = PBXBuildFile; fileRef = CE6C3F6924366AE1007A17F0 /* ClientMetadata.m */; };
 		CE7B76431F54881F00EA44BD /* PsiphonTunnel.framework in CopyFiles */ = {isa = PBXBuildFile; fileRef = 66094F781E8067520069EC4E /* PsiphonTunnel.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		CE93EE5524F55B92001F4EC9 /* SharedConstants.m in Sources */ = {isa = PBXBuildFile; fileRef = CE93EE5424F55B92001F4EC9 /* SharedConstants.m */; };
@@ -752,6 +753,7 @@
 		CE50A256246997250047D3FE /* he */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = he; path = Strings/he.lproj/Localizable.strings; sourceTree = "<group>"; };
 		CE50A25724699CD80047D3FE /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = it; path = Strings/it.lproj/Localizable.strings; sourceTree = "<group>"; };
 		CE551C6924FBFB8E00011C51 /* PsiphonFeedback+FeedbackUploadProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PsiphonFeedback+FeedbackUploadProvider.swift"; sourceTree = "<group>"; };
+		CE58B641251A31370081C73C /* AppState+Feedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppState+Feedback.swift"; sourceTree = "<group>"; };
 		CE6C3F6824366AE1007A17F0 /* ClientMetadata.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ClientMetadata.h; sourceTree = "<group>"; };
 		CE6C3F6924366AE1007A17F0 /* ClientMetadata.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ClientMetadata.m; sourceTree = "<group>"; };
 		CE93EE5424F55B92001F4EC9 /* SharedConstants.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SharedConstants.m; sourceTree = "<group>"; };
@@ -1350,6 +1352,7 @@
 				52D2580F22BADE1900CA956A /* Psiphon-Bridging-Header.h */,
 				5245C5C82342A6840033EE13 /* UserDefaults.swift */,
 				52A2465D239081C100A01FF1 /* AppState.swift */,
+				CE58B641251A31370081C73C /* AppState+Feedback.swift */,
 				52DF5E9723CE5A8300A1B067 /* AppAction+ValuePaths.swift */,
 				52DF5E9923CE835100A1B067 /* UserStrings.swift */,
 				52DF5E9D23D0D01F00A1B067 /* BridgingTypes.swift */,
@@ -2165,6 +2168,7 @@
 				A8408008B18277F93286799F /* PsiphonProgressView.m in Sources */,
 				8D9E603524366D71003A46D8 /* FeedbackDescriptions.swift in Sources */,
 				8D26455F24D4842E000F46C0 /* Navigator.swift in Sources */,
+				CE58B642251A31370081C73C /* AppState+Feedback.swift in Sources */,
 				CED6791B24A4F88D00C4CA81 /* JSONCodable.m in Sources */,
 				A8408FA13890CD67154033C6 /* RegionSelectionButton.m in Sources */,
 				A8408E611665FC60D5DFF339 /* SubscriptionStatusView.m in Sources */,

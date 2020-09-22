@@ -83,9 +83,9 @@ public enum FeedbackUploadProviderResult {
 }
 
 /// Interface which exposes `FeedbackUploadProvider` callbacks as closures.
-fileprivate class FeedbackHandler : NSObject,
-                                    PsiphonTunnelLoggerDelegate,
-                                    PsiphonTunnelFeedbackDelegate {
+fileprivate final class FeedbackHandler : NSObject,
+                                          PsiphonTunnelLoggerDelegate,
+                                          PsiphonTunnelFeedbackDelegate {
 
     let feedbackUpload: FeedbackUploadProvider
 
