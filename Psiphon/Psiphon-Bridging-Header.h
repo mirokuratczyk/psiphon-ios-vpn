@@ -60,6 +60,6 @@
 #import "PsiphonConfigUserDefaults.h"
 
 // Feedback
-#import "FeedbackUpload.h"
+#import "Feedback.h"
 #import "JetsamTracking.h"
 #import "JetsamMetrics+Feedback.h"

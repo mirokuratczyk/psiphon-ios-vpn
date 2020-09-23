@@ -47,7 +47,7 @@ public enum FeedbackAction {
 
 public struct FeedbackReducerState {
     public var queuedFeedbacks: [UserFeedback]
-    var feedbackUpload: FeedbackUploadProvider? // initialized lazily
+    var feedbackUpload: FeedbackUpload? // initialized lazily
 
     public init(queuedFeedbacks: [UserFeedback]) {
         self.queuedFeedbacks = queuedFeedbacks
@@ -134,7 +134,7 @@ public func feedbackReducer(
     case ._sendNextFeedback:
 
         if case .none = state.feedbackUpload {
-            state.feedbackUpload = environment.getFeedbackUpload();
+            state.feedbackUpload = FeedbackUpload(feedbackUploadProvider: environment.getFeedbackUpload());
         }
         let feedbackUpload = state.feedbackUpload!
 
@@ -178,7 +178,6 @@ public func feedbackReducer(
     }
 }
 
-
 /// Signal which encapsulates the feedback upload operation.
 ///
 /// The upload will be started once there is network connectivity and VPN is
@@ -197,10 +196,10 @@ public func feedbackReducer(
 ///   - userFeedback: User feedback to upload.
 ///   - feedbackUpload: Instance which will facilitate the feedback upload.
 ///   - environment: Reducer environment.
-/// - Returns: Cold signal which will perform the feedback upload operation when observed. The signal emits FeedbackAction items
+/// - Returns: Cold signal which will perform the feedback upload operation once observed. The signal emits FeedbackAction items
 /// to signal when the upload has completed and to perform logging.
 fileprivate func sendFeedback(userFeedback: UserFeedback,
-                              feedbackUpload: FeedbackUploadProvider,
+                              feedbackUpload: FeedbackUpload,
                               environment: FeedbackReducerEnvironment) -> Effect<FeedbackAction> {
 
     // Breaking this expression out helps the type checker reason about the type of the
@@ -280,9 +279,8 @@ fileprivate func sendFeedback(userFeedback: UserFeedback,
                     }
 
                     return
-                        sendFeedback(feedbackUpload: feedbackUpload,
-                                     feedbackJson: feedbackJSON,
-                                     feedbackConfigJson: psiphonConfig)
+                        feedbackUpload.sendFeedback(feedbackJson: feedbackJSON,
+                                                    feedbackConfigJson: psiphonConfig)
                         .flatMap(.concat) {
                             (value: FeedbackUploadProviderResult)
                             -> SignalProducer<SignalTermination<FeedbackAction>, Never> in

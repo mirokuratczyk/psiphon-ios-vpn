@@ -87,15 +87,15 @@ fileprivate final class FeedbackHandler : NSObject,
                                           PsiphonTunnelLoggerDelegate,
                                           PsiphonTunnelFeedbackDelegate {
 
-    let feedbackUpload: FeedbackUploadProvider
+    let feedbackUploadProvider: FeedbackUploadProvider
 
     var completionHandler: (Error?) -> ()
     var noticeHandler: (Notice) -> ()
 
-    public init(feedbackUpload: FeedbackUploadProvider,
+    public init(feedbackUploadProvider: FeedbackUploadProvider,
                 completionHandler: @escaping (Error?) -> (),
                 noticeHandler: @escaping (Notice) -> ()) {
-        self.feedbackUpload = feedbackUpload
+        self.feedbackUploadProvider = feedbackUploadProvider
         self.completionHandler = completionHandler
         self.noticeHandler = noticeHandler
         super.init()
@@ -103,16 +103,16 @@ fileprivate final class FeedbackHandler : NSObject,
 
     public func sendFeedback(feedbackJson: String,
                              feedbackConfigJson: [AnyHashable: Any]) {
-        self.feedbackUpload.startUpload(feedbackJson: feedbackJson,
-                                        feedbackConfigJson: feedbackConfigJson,
-                                        uploadPath: "",
-                                        logger: self,
-                                        feedbackDelegate: self)
+        self.feedbackUploadProvider.startUpload(feedbackJson: feedbackJson,
+                                                feedbackConfigJson: feedbackConfigJson,
+                                                uploadPath: "",
+                                                logger: self,
+                                                feedbackDelegate: self)
     }
 
     /// Interrupts any feedback upload operations in progress.
     public func stopSend() {
-        self.feedbackUpload.stopUpload()
+        self.feedbackUploadProvider.stopUpload()
     }
 
     /// `PsiphonTunnelLoggerDelegate` implementation.
@@ -126,26 +126,63 @@ fileprivate final class FeedbackHandler : NSObject,
     }
 }
 
-/// Transforms `FeedbackUploadProvider` callbacks into a stream of values.
-func sendFeedback(feedbackUpload: FeedbackUploadProvider,
-                  feedbackJson: String,
-                  feedbackConfigJson: [AnyHashable: Any])
-                 -> SignalProducer<FeedbackUploadProviderResult, Never> {
-    return SignalProducer { observer, lifetime in
-        let f = FeedbackHandler(feedbackUpload: feedbackUpload, completionHandler: { err in
-            if !lifetime.hasEnded {
-                observer.send(value: .completed(err))
-                observer.sendCompleted()
+/// FeedbackUpload creates an interface around FeedbackUploadProvider which provides some guarantees with regards to call and
+/// callback ordering by scheduling work on a serial queue.
+class FeedbackUpload {
+
+    let feedbackUploadProvider: FeedbackUploadProvider
+    let workQueue: DispatchQueue
+
+    init(feedbackUploadProvider: FeedbackUploadProvider) {
+        self.feedbackUploadProvider = feedbackUploadProvider
+        self.workQueue = DispatchQueue(label: "ca.psiphon.Psiphon.feedbackUploadWorkQueue",
+                                       qos: .background, attributes: .init(),
+                                       autoreleaseFrequency: .inherit, target: DispatchQueue.global())
+    }
+
+
+    /// Returns a cold signal which will perform the feedback upload operation once observed. See `FeedbackUploadProviderResult`
+    /// for more information on the items emitted.
+    ///
+    /// - Warning: only one upload is supported at a time and the returned signal must complete or be disposed before calling this
+    /// function again.
+    func sendFeedback(feedbackJson: String,
+                      feedbackConfigJson: [AnyHashable: Any])
+                     -> SignalProducer<FeedbackUploadProviderResult, Never> {
+        return SignalProducer { [weak self] observer, lifetime in
+
+            guard let strongSelf = self else {
+                return
             }
-        }, noticeHandler: { (notice) in
-            // Note: this closure will not be called after `completionHandler` is called.
-            if !lifetime.hasEnded {
-                observer.send(value:.notice(notice))
+
+            // Transform `FeedbackUploadProvider` callbacks into a stream of values.
+            let f = FeedbackHandler(feedbackUploadProvider: strongSelf.feedbackUploadProvider, completionHandler: { [weak self] err in
+                if let strongSelf = self {
+                    if !lifetime.hasEnded {
+                        // Immediately return so we move off the callstack of sendCompleted
+                        // callback: see PsiphonTunnel.h for more details.
+                        strongSelf.workQueue.async {
+                            observer.send(value: .completed(err))
+                            observer.sendCompleted()
+                        }
+                    }
+                }
+            }, noticeHandler: { [weak self] notice in
+                if let strongSelf = self {
+                    // Note: this closure will not be called after `completionHandler` is called.
+                    if !lifetime.hasEnded {
+                        strongSelf.workQueue.async {
+                            observer.send(value:.notice(notice))
+                        }
+                    }
+                }
+            })
+            lifetime.observeEnded {
+                f.stopSend()
             }
-        })
-        f.sendFeedback(feedbackJson: feedbackJson, feedbackConfigJson: feedbackConfigJson)
-        lifetime.observeEnded {
-            f.stopSend()
+            strongSelf.workQueue.async {
+                f.sendFeedback(feedbackJson: feedbackJson, feedbackConfigJson: feedbackConfigJson)
+            }
         }
     }
 }
@@ -258,7 +295,7 @@ func feedbackJSON(userFeedback: UserFeedback,
 
     do {
         let jsonBlob =
-            try FeedbackUpload.generateFeedbackJSON(
+            try Feedback.generateJSON(
                 Int(userFeedback.selectedThumbIndex),
                 buildInfo: PsiphonTunnel.getBuildInfo(),
                 comments: userFeedback.comments,
