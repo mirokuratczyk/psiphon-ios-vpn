@@ -148,8 +148,8 @@ public func feedbackReducer(
         return []
     case .userSubmittedFeedback(let selectedThumbIndex, let comments, let email, let uploadDiagnostics):
         state.queuedFeedbacks.append(
-            UserFeedback(selectedThumbIndex: selectedThumbIndex, comments: comments,
-                         email: email, uploadDiagnostics: uploadDiagnostics)
+            UserFeedback(selectedThumbIndex: selectedThumbIndex, comments: comments, email: email,
+                         uploadDiagnostics: uploadDiagnostics, submitTime: environment.getCurrentTime())
         )
 
         let effects: [SignalProducer<FeedbackAction, Never>] =

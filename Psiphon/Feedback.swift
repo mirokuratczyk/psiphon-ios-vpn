@@ -49,14 +49,16 @@ public struct UserFeedback: Equatable {
     let comments: String
     let email: String
     let uploadDiagnostics: Bool
+    let submitTime: Date
 
-    public init(selectedThumbIndex: Int, comments: String,
-                email: String, uploadDiagnostics: Bool) {
+    public init(selectedThumbIndex: Int, comments: String, email: String,
+                uploadDiagnostics: Bool, submitTime: Date) {
 
         self.selectedThumbIndex = selectedThumbIndex
         self.comments = comments
         self.email = email
         self.uploadDiagnostics = uploadDiagnostics
+        self.submitTime = submitTime;
     }
 }
 
@@ -246,7 +248,10 @@ func feedbackJSON(userFeedback: UserFeedback,
                   getCurrentTime: () -> Date,
                   reachabilityStatus: ReachabilityStatus) -> Result<String, Error> {
 
-    var diagnosticEntries = sharedDB.getAllLogs()
+    // Only capture diagnostics logged before user submitted feedback.
+    var diagnosticEntries = sharedDB.getAllLogs().filter { entry in
+        return entry.timestamp.compare(userFeedback.submitTime) == .orderedAscending
+    }
 
     // Add jetsam metrics log.
 
@@ -305,7 +310,8 @@ func feedbackJSON(userFeedback: UserFeedback,
                 withClientPlatform: "ios-vpn",
                 withConnectionType: reachabilityStatus.connectionTypeForFeedback,
                 isJailbroken: JailbreakCheck.isDeviceJailbroken(),
-                diagnosticEntries: diagnosticEntries)
+                diagnosticEntries: diagnosticEntries,
+                statusEntries: .none)
         return .success(jsonBlob)
     } catch {
         let error = ErrorRepr(repr: "failed to generate feedback JSON: \(error)")
