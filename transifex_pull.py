@@ -175,7 +175,7 @@ def gather_resource(resource, langs=None, skip_untranslated=False):
 def request(command, params=None):
     url = 'https://www.transifex.com/api/2/project/Psiphon3/' + command + '/'
     r = requests.get(url, params=params,
-                     auth=(_getconfig()['username'], _getconfig()['password']))
+                     auth=('api', _getconfig()['api_token']))
     if r.status_code != 200:
         raise Exception('Request failed with code %d: %s' %
                             (r.status_code, url))
