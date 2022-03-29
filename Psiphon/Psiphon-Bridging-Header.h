@@ -32,6 +32,9 @@
 #import "Notifier.h"
 #import "AppDelegate.h"
 #import "PsiFeedbackLogger.h"
+#import <PsiphonTunnel/Reachability.h>
+#import <PsiphonTunnel/DefaultRouteMonitor.h>
+#import <PsiphonTunnel/ReachabilityProtocol.h>
 #import <PsiphonTunnel/PsiphonTunnel.h>
 #import "EmbeddedServerEntries.h"
 #import "FileUtils.h"

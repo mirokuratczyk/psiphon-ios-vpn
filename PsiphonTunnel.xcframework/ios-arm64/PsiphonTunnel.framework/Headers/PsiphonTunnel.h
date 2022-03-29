@@ -23,6 +23,8 @@
  */
 
 #import "Reachability.h"
+#import "DefaultRouteMonitor.h"
+#import "ReachabilityProtocol.h"
 #import "JailbreakCheck.h"
 #import "PsiphonClientPlatform.h"
 
@@ -180,7 +182,7 @@ Called when the device's Internet connection state has changed.
 This may mean that it had connectivity and now doesn't, or went from Wi-Fi to
 WWAN or vice versa or VPN state changed
 */
-- (void)onInternetReachabilityChanged:(Reachability * _Nonnull)currentReachability;
+- (void)onInternetReachabilityChanged:(NetworkReachability)currentReachability;
 
 /*!
  Called when tunnel-core determines which server egress regions are available
@@ -225,12 +227,6 @@ WWAN or vice versa or VPN state changed
  @param region  The country code of the client, as determined by the server.
  */
 - (void)onClientRegion:(NSString * _Nonnull)region;
-
-/*!
- Called after the handshake with the Psiphon server, with the client address as seen by the server.
- @param address  The Internet address of the client, IP:port, as seen by the server.
- */
-- (void)onClientAddress:(NSString * _Nonnull)address;
 
 /*!
  Called to report that split tunnel is on for the given regions.
@@ -291,6 +287,11 @@ WWAN or vice versa or VPN state changed
  @param subject Additional context or classification of the reason; blank for none.
  */
 - (void)onServerAlert:(NSString * _Nonnull)reason :(NSString * _Nonnull)subject :(NSArray * _Nonnull)actionURLs;
+
+/*!
+TODO.
+ */
+- (void)resetNetworkSettings;
 
 @end
 
@@ -371,6 +372,16 @@ Returns the path where the rotated notices file will be created.
 - (void)stop;
 
 /*!
+ TODO.
+ */
+- (NSString*_Nonnull)resetDNSCache;
+
+/*!
+ TODO.
+ */
+- (void)networkSettingsReset;
+
+/*!
  Returns the current tunnel connection state.
  @return  The current connection state.
  */
@@ -381,7 +392,7 @@ Returns the path where the rotated notices file will be created.
  disconnected state.
  @return The current reachability status.
  */
-- (BOOL)getNetworkReachabilityStatus:(NetworkStatus * _Nonnull)status;
+- (BOOL)getNetworkReachabilityStatus:(NetworkReachability * _Nonnull)status;
 
 /*!
  Provides the port number of the local SOCKS proxy. Only valid when currently connected (will return 0 otherwise).

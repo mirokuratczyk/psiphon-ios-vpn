@@ -18,6 +18,7 @@
  */
 
 #import <PsiphonTunnel/PsiphonTunnel.h>
+
 #import "TunnelFileDescriptor.h"
 #import <NetworkExtension/NEPacketTunnelNetworkSettings.h>
 #import <NetworkExtension/NEIPv4Settings.h>
@@ -139,6 +140,9 @@ typedef NS_ENUM(NSInteger, TunnelProviderState) {
         workQueue = dispatch_queue_create("ca.psiphon.PsiphonVPN.workQueue", DISPATCH_QUEUE_SERIAL);
 
         _psiphonTunnel = [PsiphonTunnel newPsiphonTunnel:(id <TunneledAppDelegate>) self];
+
+        NSString *newDNSCache = [_psiphonTunnel resetDNSCache];
+        [PsiFeedbackLogger info:@"%@", [NSString stringWithFormat:@"init: new DNS cache %@", newDNSCache]];
 
         _tunnelProviderState = TunnelProviderStateInit;
         _waitForContainerStartVPNCommand = FALSE;
@@ -316,6 +320,7 @@ typedef NS_ENUM(NSInteger, TunnelProviderState) {
             }
         }
 
+        // TODO: reset PsiphonTunnel DNS cache here?
         [self setTunnelNetworkSettings:[self getTunnelSettings] completionHandler:^(NSError *_Nullable error) {
 
             if (error != nil) {
@@ -345,6 +350,7 @@ typedef NS_ENUM(NSInteger, TunnelProviderState) {
 
         self.tunnelProviderState = TunnelProviderStateZombie;
 
+        // TODO: reset PsiphonTunnel DNS cache here?
         [self setTunnelNetworkSettings:[self getTunnelSettings] completionHandler:^(NSError *error) {
             [weakSelf startVPN];
             weakSelf.reasserting = TRUE;
@@ -361,7 +367,7 @@ typedef NS_ENUM(NSInteger, TunnelProviderState) {
                                       @"StopReason": [PacketTunnelUtils textStopReason:reason],
                                       @"StopCode": @(reason)}];
 
-    [self.psiphonTunnel stop];
+    [self.psiphonTunnel stop]; // Note: stop called directly
 }
 
 - (void)displayMessageAndExitGracefully:(NSString *)message {
@@ -411,7 +417,7 @@ typedef NS_ENUM(NSInteger, TunnelProviderState) {
 - (NSNumber *)isNetworkReachable {
     NetworkReachability status;
     if ([self.psiphonTunnel getNetworkReachabilityStatus:&status]) {
-        return [NSNumber numberWithBool:status != NotReachable];
+        return [NSNumber numberWithBool:status != NetworkReachabilityNotReachable];
     }
     return [NSNumber numberWithBool:FALSE];
 }
@@ -973,13 +979,13 @@ typedef NS_ENUM(NSInteger, TunnelProviderState) {
                           identifier:AlertIdSelectedRegionUnavailable];
             
             // Starting the tunnel with "Best Performance" region.
-            [self startPsiphonTunnel];
+            [self startPsiphonTunnel]; // TODO: need to inspect error
         });
     }
 }
 
 - (void)onInternetReachabilityChanged:(NetworkReachability)s {
-    if (s == NotReachable) {
+    if (s == NetworkReachabilityNotReachable) {
         self.postedNetworkConnectivityFailed = TRUE;
         [[Notifier sharedInstance] post:NotifierNetworkConnectivityFailed];
 
@@ -1010,6 +1016,50 @@ typedef NS_ENUM(NSInteger, TunnelProviderState) {
 
 - (void)onClientRegion:(NSString *)region {
     [self.sharedDB insertNewClientRegion:region];
+}
+
+- (void)resetNetworkSettings {
+
+    [PsiFeedbackLogger info:@"resetNetworkSettings: resetting network settings"];
+
+    dispatch_async(self->workQueue, ^{
+        self.reasserting = TRUE; // will be set to FALSE in onConnected->tryStartVPN
+
+        __weak PacketTunnelProvider *weakSelf = self;
+        [self setTunnelNetworkSettings:nil completionHandler:^(NSError *_Nullable error) {
+            if (error != nil) {
+                [PsiFeedbackLogger info:@"%@", [NSString stringWithFormat:@"resetNetworkSettings: resetting network settings to default failed %@", error.localizedDescription]];
+                // TODO: crash or retry
+                return;
+            } else {
+                [PsiFeedbackLogger info:@"resetNetworkSettings: reset network settings to default"];
+            }
+
+            // Reset PsiphonTunnel DNS cache
+            NSString *newDNSCache = [weakSelf.psiphonTunnel resetDNSCache];
+            [PsiFeedbackLogger info:@"%@", [NSString stringWithFormat:@"resetNetworkSettings: new DNS cache %@", newDNSCache]];
+
+            [weakSelf setTunnelNetworkSettings:[weakSelf getTunnelSettings] completionHandler:^(NSError *_Nullable error) {
+
+                if (error != nil) {
+                    [PsiFeedbackLogger info:@"%@", [NSString stringWithFormat:@"resetNetworkSettings: failed to set network settings %@", error.localizedDescription]];
+                    // TODO: crash or retry
+                    return;
+                } else {
+                    [PsiFeedbackLogger info:@"resetNetworkSettings: set network settings"];
+                }
+
+                __strong PacketTunnelProvider *strongSelf = weakSelf;
+                if (strongSelf == nil) {
+                    return;
+                }
+                dispatch_async(strongSelf->workQueue, ^{
+                    [PsiFeedbackLogger info:@"resetNetworkSettings: network settings reset complete"];
+                    [weakSelf.psiphonTunnel networkSettingsReset];
+                });
+            }];
+        }];
+    });
 }
 
 @end
