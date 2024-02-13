@@ -314,7 +314,7 @@ public final class PsiphonTPM: TunnelProviderManager {
             self.wrappedManager.isOnDemandEnabled = false
             
             if #available(iOS 14.0, *) {
-                self.wrappedManager.protocolConfiguration!.includeAllNetworks = true
+                self.wrappedManager.protocolConfiguration!.includeAllNetworks = false
             }
             
             if #available(iOS 14.2, *) {

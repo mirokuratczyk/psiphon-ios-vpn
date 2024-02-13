@@ -30,7 +30,7 @@
  * @param pageNum Number of pages to allocate at each interval.
  * @return Running NSTimer.
  */
-+ (NSTimer *)jetsamWithAllocationInterval:(NSTimeInterval)allocationInterval withNumberOfPages:(unsigned int)pageNum;
++ (dispatch_source_t)jetsamWithAllocationInterval:(NSTimeInterval)allocationInterval withNumberOfPages:(unsigned int)pageNum;
 
 #endif
 

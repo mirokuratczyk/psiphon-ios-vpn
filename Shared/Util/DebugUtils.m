@@ -21,11 +21,13 @@
 #import "AppStats.h"
 #import "Asserts.h"
 #import "Logging.h"
-
+#import "AppProfiler.h"
 
 @implementation DebugUtils
 
-+ (NSTimer *)jetsamWithAllocationInterval:(NSTimeInterval)allocationInterval withNumberOfPages:(unsigned int)pageNum {
++ (dispatch_source_t)jetsamWithAllocationInterval:(NSTimeInterval)allocationInterval withNumberOfPages:(unsigned int)pageNum {
+
+    [AppProfiler logMemoryReportWithTag:@"jetsam initiated"];
 
     NSError *err;
     vm_size_t pageSize = [AppStats pageSize:&err];
@@ -34,16 +36,25 @@
         PSIAssert(FALSE);
     }
 
-    NSTimer *t = [NSTimer timerWithTimeInterval:allocationInterval repeats:TRUE block:^(NSTimer *timer) {
+    dispatch_source_t timerDispatch = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
+                                           dispatch_get_main_queue());
+
+    dispatch_source_set_timer(timerDispatch,
+                              dispatch_time(DISPATCH_TIME_NOW, allocationInterval * NSEC_PER_SEC),
+                              allocationInterval * NSEC_PER_SEC,
+                              1 * NSEC_PER_SEC);
+
+    dispatch_source_set_event_handler(timerDispatch, ^{
+        [AppProfiler logMemoryReportWithTag:@"jetsam"];
         char * array = (char *) malloc(sizeof(char) * pageSize * pageNum);
         for (int i = 1; i <= pageNum; i++) {
             array[i * pageSize - 1] = '0';
         }
-    }];
+    });
 
-    [[NSRunLoop mainRunLoop] addTimer:t forMode:NSDefaultRunLoopMode];
+    dispatch_resume(timerDispatch);
 
-    return t;
+    return timerDispatch;
 }
 
 @end

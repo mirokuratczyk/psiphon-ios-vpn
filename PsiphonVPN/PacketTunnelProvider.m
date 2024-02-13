@@ -112,7 +112,9 @@ typedef NS_ENUM(NSInteger, TunnelProviderState) {
     dispatch_queue_t workQueue;
 
     AppProfiler *_Nullable appProfiler;
-    
+
+    dispatch_source_t jetsam;
+
     // sessionConfigValues should only be accessed through the `workQueue`.
     AuthorizationStore *_Nonnull authorizationStore;
     
@@ -172,10 +174,7 @@ typedef NS_ENUM(NSInteger, TunnelProviderState) {
 
     if (!appProfiler && start) {
         appProfiler = [[AppProfiler alloc] init];
-        [appProfiler startProfilingWithStartInterval:1
-                                          forNumLogs:10
-                         andThenExponentialBackoffTo:60*30
-                            withNumLogsAtEachBackOff:1];
+        [appProfiler startProfilingWithInterval:2];
 
     } else if (!start) {
         [appProfiler stopProfiling];
@@ -426,7 +425,7 @@ typedef NS_ENUM(NSInteger, TunnelProviderState) {
 #if DEBUG || DEV_RELEASE
         
         if ([NotifierDebugForceJetsam isEqualToString:message]) {
-            [DebugUtils jetsamWithAllocationInterval:1 withNumberOfPages:15];
+            self->jetsam = [DebugUtils jetsamWithAllocationInterval:1 withNumberOfPages:15];
             
         } else if ([NotifierDebugGoProfile isEqualToString:message]) {
             

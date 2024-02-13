@@ -22,6 +22,7 @@
 #import "Asserts.h"
 #import "Logging.h"
 #import "PsiFeedbackLogger.h"
+#include <os/proc.h>
 
 PsiFeedbackLogType const ExtensionMemoryProfilingLogType = @"MemoryProfiling";
 
@@ -137,32 +138,56 @@ PsiFeedbackLogType const ExtensionMemoryProfilingLogType = @"MemoryProfiling";
 
 #pragma mark - Logging
 
++ (NSString *)memoryStringForBytes:(unsigned long long)memoryBytes {
+    NSByteCountFormatter *byteFormatter = [[NSByteCountFormatter alloc] init];
+    byteFormatter.allowedUnits = NSByteCountFormatterUseMB;
+    byteFormatter.countStyle = NSByteCountFormatterCountStyleMemory;
+    NSString *memoryString = [byteFormatter stringFromByteCount:memoryBytes];
+    return memoryString;
+}
+
 - (void)logMemoryReportIfDelta {
-    NSError *e;
 
-    float rss = (float)[AppStats privateResidentSetSize:&e] / 1000000; // in MB
-
-    if (e) {
-        [PsiFeedbackLogger errorWithType:ExtensionMemoryProfilingLogType message:@"Failed to get RSS" object:e];
-    } else if ((int)(lastRSS * 100) != (int)(rss * 100)) {
-        // Only log if RSS has delta greater than 0.01
-        lastRSS = rss;
-        NSString *msg = [NSString stringWithFormat:@"%.2fM", rss];
-        [PsiFeedbackLogger infoWithType:ExtensionMemoryProfilingLogType json:@{@"rss":msg}];
+    if (@available(iOS 13.0, *)) {
+        NSString *mem = [AppProfiler memoryStringForBytes:(long)os_proc_available_memory()];
+        [PsiFeedbackLogger infoWithType:ExtensionMemoryProfilingLogType json:@{@"os_proc_available_memory":mem}];
+    } else {
+        // Fallback on earlier versions
     }
+
+//    NSError *e;
+//
+//    float rss = (float)[AppStats privateResidentSetSize:&e] / 1000000; // in MB
+//
+//    if (e) {
+//        [PsiFeedbackLogger errorWithType:ExtensionMemoryProfilingLogType message:@"Failed to get RSS" object:e];
+//    } else if ((int)(lastRSS * 100) != (int)(rss * 100)) {
+//        // Only log if RSS has delta greater than 0.01
+//        lastRSS = rss;
+//        NSString *msg = [NSString stringWithFormat:@"%.2fM", rss];
+//        [PsiFeedbackLogger infoWithType:ExtensionMemoryProfilingLogType json:@{@"rss":msg}];
+//    }
 }
 
 + (void)logMemoryReportWithTag:(NSString*_Nonnull)tag {
-    NSError *e;
 
-    float rss = (float)[AppStats privateResidentSetSize:&e] / 1000000; // in MB
-
-    if (e) {
-        [PsiFeedbackLogger errorWithType:ExtensionMemoryProfilingLogType message:@"Failed to get RSS" object:e];
+    if (@available(iOS 13.0, *)) {
+        NSString *mem = [AppProfiler memoryStringForBytes:(long)os_proc_available_memory()];
+        [PsiFeedbackLogger infoWithType:ExtensionMemoryProfilingLogType json:@{@"os_proc_available_memory":mem, @"tag":tag}];
     } else {
-        NSString *msg = [NSString stringWithFormat:@"%.2fM", rss];
-        [PsiFeedbackLogger infoWithType:ExtensionMemoryProfilingLogType json:@{@"rss":msg,@"tag":tag}];
+        // Fallback on earlier versions
     }
+
+//    NSError *e;
+//
+//    float rss = (float)[AppStats privateResidentSetSize:&e] / 1000000; // in MB
+//
+//    if (e) {
+//        [PsiFeedbackLogger errorWithType:ExtensionMemoryProfilingLogType message:@"Failed to get RSS" object:e];
+//    } else {
+//        NSString *msg = [NSString stringWithFormat:@"%.2fM", rss];
+//        [PsiFeedbackLogger infoWithType:ExtensionMemoryProfilingLogType json:@{@"rss":msg,@"tag":tag}];
+//    }
 }
 
 @end
